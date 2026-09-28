@@ -1,27 +1,26 @@
-const API_KEY = '0ecfed442f534845885f467ab562b30c'; // Replace with your API key
-const REFRESH_INTERVAL = 300000; // 5 minutes in milliseconds
-
-// Search queries for Accenture news
-const searchQueries = 'Accenture OR "Accenture Federal Services"';
+const REFRESH_INTERVAL = 300000; // 5 minutes
 
 async function fetchNews() {
     const container = document.getElementById('news-container');
     
     try {
-        const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQueries)}&sortBy=publishedAt&language=en&pageSize=15&apiKey=${API_KEY}`;
+        // Use RSS2JSON service to convert Google News RSS to JSON
+        const searchQuery = 'Accenture OR "Accenture Federal Services"';
+        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=en-US&gl=US&ceid=US:en`;
+        const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=15`;
         
-        const response = await fetch(url);
+        const response = await fetch(apiUrl);
         const data = await response.json();
         
-        if (data.status === 'ok' && data.articles) {
-            displayNews(data.articles);
+        if (data.status === 'ok' && data.items) {
+            displayNews(data.items);
             updateTimestamp();
         } else {
-            throw new Error(data.message || 'Failed to fetch news');
+            throw new Error('Failed to fetch news');
         }
     } catch (error) {
         console.error('Error fetching news:', error);
-        container.innerHTML = `<div class="error">Unable to load news. Please try again later.</div>`;
+        container.innerHTML = `<div class="error">Unable to load news. Please try again later.<br><small>${error.message}</small></div>`;
     }
 }
 
@@ -34,24 +33,33 @@ function displayNews(articles) {
     }
     
     container.innerHTML = articles.map(article => {
-        const date = new Date(article.publishedAt);
+        const date = new Date(article.pubDate);
         const timeAgo = getTimeAgo(date);
+        
+        // Clean up the title (remove source suffix that Google News adds)
+        const title = article.title.replace(/ - [^-]+$/, '');
         
         return `
             <div class="news-item">
                 <div class="news-title">
-                    <a href="${article.url}" target="_blank" rel="noopener noreferrer">
-                        ${article.title}
+                    <a href="${article.link}" target="_blank" rel="noopener noreferrer">
+                        ${title}
                     </a>
                 </div>
                 <div class="news-meta">
-                    <span class="news-source">${article.source.name}</span>
+                    <span class="news-source">Google News</span>
                     <span class="news-date">${timeAgo}</span>
                 </div>
-                ${article.description ? `<div class="news-description">${article.description}</div>` : ''}
+                ${article.description ? `<div class="news-description">${stripHtml(article.description)}</div>` : ''}
             </div>
         `;
     }).join('');
+}
+
+function stripHtml(html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
 }
 
 function getTimeAgo(date) {
