@@ -4,56 +4,63 @@ async function fetchNews() {
     const container = document.getElementById('news-container');
     
     try {
-        // Use RSS2JSON service to convert Google News RSS to JSON
+        // Use AllOrigins CORS proxy with Google News RSS
         const searchQuery = 'Accenture OR "Accenture Federal Services"';
         const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=en-US&gl=US&ceid=US:en`;
-        const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=15`;
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
         
-        const response = await fetch(apiUrl);
-        const data = await response.json();
+        const response = await fetch(proxyUrl);
+        const text = await response.text();
         
-        if (data.status === 'ok' && data.items) {
-            displayNews(data.items);
+        // Parse XML RSS feed
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, 'text/xml');
+        const items = xml.querySelectorAll('item');
+        
+        if (items.length > 0) {
+            displayNews(items);
             updateTimestamp();
         } else {
-            throw new Error('Failed to fetch news');
+            container.innerHTML = '<div class="loading">No recent news found.</div>';
         }
     } catch (error) {
         console.error('Error fetching news:', error);
-        container.innerHTML = `<div class="error">Unable to load news. Please try again later.<br><small>${error.message}</small></div>`;
+        container.innerHTML = `<div class="error">Unable to load news. Please try again later.</div>`;
     }
 }
 
-function displayNews(articles) {
+function displayNews(items) {
     const container = document.getElementById('news-container');
     
-    if (articles.length === 0) {
-        container.innerHTML = '<div class="loading">No recent news found.</div>';
-        return;
-    }
-    
-    container.innerHTML = articles.map(article => {
-        const date = new Date(article.pubDate);
+    const articles = Array.from(items).slice(0, 15).map(item => {
+        const title = item.querySelector('title')?.textContent || 'No title';
+        const link = item.querySelector('link')?.textContent || '#';
+        const pubDate = item.querySelector('pubDate')?.textContent || '';
+        const description = item.querySelector('description')?.textContent || '';
+        
+        const date = new Date(pubDate);
         const timeAgo = getTimeAgo(date);
         
-        // Clean up the title (remove source suffix that Google News adds)
-        const title = article.title.replace(/ - [^-]+$/, '');
+        // Clean up title (remove source suffix)
+        const cleanTitle = title.replace(/ - [^-]+$/, '');
         
         return `
             <div class="news-item">
                 <div class="news-title">
-                    <a href="${article.link}" target="_blank" rel="noopener noreferrer">
-                        ${title}
+                    <a href="${link}" target="_blank" rel="noopener noreferrer">
+                        ${cleanTitle}
                     </a>
                 </div>
                 <div class="news-meta">
                     <span class="news-source">Google News</span>
                     <span class="news-date">${timeAgo}</span>
                 </div>
-                ${article.description ? `<div class="news-description">${stripHtml(article.description)}</div>` : ''}
+                ${description ? `<div class="news-description">${stripHtml(description)}</div>` : ''}
             </div>
         `;
     }).join('');
+    
+    container.innerHTML = articles;
 }
 
 function stripHtml(html) {
